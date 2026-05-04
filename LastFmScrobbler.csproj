@@ -10,9 +10,9 @@
     <AssemblyName>LastFmScrobbler</AssemblyName>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <Version>1.1.100</Version>
+    <AssemblyVersion>1.1.100.0</AssemblyVersion>
+    <FileVersion>1.1.100.0</FileVersion>
     <Product>Last.fm Scrobbler</Product>
     <Company>Open Source</Company>
     <Copyright>Copyright © 2025</Copyright>
