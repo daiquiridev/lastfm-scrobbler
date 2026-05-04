@@ -4,14 +4,14 @@ namespace LastFmScrobbler.UI;
 
 public class ManualScrobbleForm : Form
 {
-    public string TrackTitle  { get; private set; } = string.Empty;
-    public string Artist      { get; private set; } = string.Empty;
-    public string Album       { get; private set; } = string.Empty;
-    public DateTime PlayedAt  { get; private set; }
+    public string TrackTitle { get; private set; } = string.Empty;
+    public string Artist     { get; private set; } = string.Empty;
+    public string Album      { get; private set; } = string.Empty;
+    public DateTime PlayedAt { get; private set; }
 
-    private TextBox _titleBox  = null!;
-    private TextBox _artistBox = null!;
-    private TextBox _albumBox  = null!;
+    private TextBox      _titleBox   = null!;
+    private TextBox      _artistBox  = null!;
+    private TextBox      _albumBox   = null!;
     private DateTimePicker _datePicker = null!;
 
     public ManualScrobbleForm(string? artist = null, string? title = null, string? album = null)
@@ -25,31 +25,32 @@ public class ManualScrobbleForm : Form
     private void InitializeComponent()
     {
         Text            = Loc.T("ManualScrobbleTitle");
-        Size            = new Size(430, 256);
+        Size            = new Size(460, 272);
         StartPosition   = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
         MinimizeBox     = false;
-        Font            = new Font("Segoe UI", 9f);
+        Font            = FontManager.Regular(9.5f);
         BackColor       = Color.FromArgb(28, 28, 28);
         ForeColor       = Color.FromArgb(220, 220, 220);
 
-        int lx = 12, rx = 110, rw = 288, y = 16;
+        const int lx = 14, rx = 120, rw = 300, y0 = 18;
 
-        _titleBox  = Input(rw, 24);
-        _artistBox = Input(rw, 24);
-        _albumBox  = Input(rw, 24);
+        _titleBox  = Input(rw, 26);
+        _artistBox = Input(rw, 26);
+        _albumBox  = Input(rw, 26);
 
         _datePicker = new DateTimePicker
         {
-            Location    = new Point(rx, y + 3 * 36),
-            Size        = new Size(rw, 24),
-            Format      = DateTimePickerFormat.Custom,
-            CustomFormat = "yyyy-MM-dd  HH:mm",
-            ShowUpDown  = false,
-            Value       = DateTime.Now,
-            CalendarForeColor   = Color.FromArgb(220, 220, 220),
+            Location        = new Point(rx, y0 + 3 * 38),
+            Size            = new Size(rw, 26),
+            Format          = DateTimePickerFormat.Custom,
+            CustomFormat    = "yyyy-MM-dd  HH:mm",
+            ShowUpDown      = false,
+            Value           = DateTime.Now,
+            CalendarForeColor       = Color.FromArgb(220, 220, 220),
             CalendarMonthBackground = Color.FromArgb(36, 36, 36),
+            Font            = FontManager.Regular(9.5f),
         };
 
         void Row(string label, Control ctrl, int row)
@@ -57,38 +58,27 @@ public class ManualScrobbleForm : Form
             Controls.Add(new Label
             {
                 Text      = label,
-                Location  = new Point(lx, y + row * 36 + 4),
-                Size      = new Size(rw - 12, 20),
-                ForeColor = Color.FromArgb(110, 110, 110),
+                Location  = new Point(lx, y0 + row * 38 + 5),
+                Size      = new Size(100, 20),
+                ForeColor = Color.FromArgb(100, 100, 100),
+                Font      = FontManager.Regular(9f),
             });
+            ctrl.Location = new Point(rx, y0 + row * 38);
             Controls.Add(ctrl);
         }
-
-        _titleBox.Location  = new Point(rx, y + 0 * 36);
-        _artistBox.Location = new Point(rx, y + 1 * 36);
-        _albumBox.Location  = new Point(rx, y + 2 * 36);
 
         Row(Loc.T("LblTrackName"), _titleBox,   0);
         Row(Loc.T("LblArtist"),   _artistBox,  1);
         Row(Loc.T("LblAlbum"),    _albumBox,   2);
         Row(Loc.T("LblPlayedAt"), _datePicker, 3);
-        Controls.Add(_datePicker);
 
-        int by = y + 4 * 36 + 4;
+        int by = y0 + 4 * 38 + 6;
 
-        var scrobbleBtn = new Button
-        {
-            Text      = "Scrobble",
-            Location  = new Point(rx, by),
-            Size      = new Size(100, 30),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(186, 0, 0),
-            ForeColor = Color.White,
-            Font      = new Font("Segoe UI", 9f),
-            UseVisualStyleBackColor = false,
-        };
-        scrobbleBtn.FlatAppearance.BorderSize = 0;
-        scrobbleBtn.Click += (_, _) =>
+        var scrobbleBtn = MakeBtn("Scrobble", 110, 32);
+        scrobbleBtn.Location  = new Point(rx, by);
+        scrobbleBtn.BackColor = Color.FromArgb(186, 0, 0);
+        scrobbleBtn.ForeColor = Color.White;
+        scrobbleBtn.Click    += (_, _) =>
         {
             var t = _titleBox.Text.Trim();
             var a = _artistBox.Text.Trim();
@@ -98,27 +88,17 @@ public class ManualScrobbleForm : Form
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            TrackTitle = t;
-            Artist     = a;
-            Album      = _albumBox.Text.Trim();
-            PlayedAt   = _datePicker.Value;
+            TrackTitle   = t;
+            Artist       = a;
+            Album        = _albumBox.Text.Trim();
+            PlayedAt     = _datePicker.Value;
             DialogResult = DialogResult.OK;
             Close();
         };
 
-        var cancelBtn = new Button
-        {
-            Text         = Loc.T("Cancel"),
-            Location     = new Point(rx + 110, by),
-            Size         = new Size(80, 30),
-            FlatStyle    = FlatStyle.Flat,
-            BackColor    = Color.FromArgb(40, 40, 40),
-            ForeColor    = Color.FromArgb(220, 220, 220),
-            Font         = new Font("Segoe UI", 9f),
-            DialogResult = DialogResult.Cancel,
-            UseVisualStyleBackColor = false,
-        };
-        cancelBtn.FlatAppearance.BorderSize = 0;
+        var cancelBtn = MakeBtn(Loc.T("Cancel"), 90, 32);
+        cancelBtn.Location    = new Point(rx + 120, by);
+        cancelBtn.DialogResult = DialogResult.Cancel;
 
         Controls.AddRange([scrobbleBtn, cancelBtn]);
         AcceptButton = scrobbleBtn;
@@ -131,6 +111,18 @@ public class ManualScrobbleForm : Form
         BackColor   = Color.FromArgb(36, 36, 36),
         ForeColor   = Color.FromArgb(220, 220, 220),
         BorderStyle = BorderStyle.FixedSingle,
-        Font        = new Font("Segoe UI", 9f),
+        Font        = FontManager.Regular(9.5f),
+    };
+
+    private static Button MakeBtn(string text, int w, int h) => new()
+    {
+        Text                    = text,
+        Size                    = new Size(w, h),
+        FlatStyle               = FlatStyle.Flat,
+        BackColor               = Color.FromArgb(40, 40, 40),
+        ForeColor               = Color.FromArgb(220, 220, 220),
+        Cursor                  = Cursors.Hand,
+        UseVisualStyleBackColor = false,
+        FlatAppearance          = { BorderSize = 0 },
     };
 }

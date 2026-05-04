@@ -22,6 +22,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="app.ico" />
+    <EmbeddedResource Include="Fonts\Geist-Regular.ttf" />
+    <EmbeddedResource Include="Fonts\Geist-Bold.ttf" />
   </ItemGroup>
 
   <ItemGroup>
