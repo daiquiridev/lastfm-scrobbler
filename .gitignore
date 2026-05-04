@@ -28,6 +28,8 @@ installer-output/
 # Secrets / local config
 appsettings.local.*
 secrets.*
+dev.credentials
+*.credentials
 
 # Local / third-party folders
 .claude/
