@@ -69,8 +69,6 @@ public class Database : IDisposable
             var value = reader.IsDBNull(1) ? null : reader.GetString(1);
             switch (key)
             {
-                case "api_key": settings.ApiKey = value; break;
-                case "api_secret": settings.ApiSecret = value; break;
                 case "session_key": settings.SessionKey = value; break;
                 case "username": settings.Username = value; break;
                 case "scrobble_threshold_pct": settings.ScrobbleThresholdPercent = int.TryParse(value, out var p) ? p : 50; break;
@@ -84,6 +82,7 @@ public class Database : IDisposable
                 case "duplicate_window_min": settings.DuplicateWindowMinutes = int.TryParse(value, out var dw) ? dw : 5; break;
                 case "accent_color": settings.AccentColor = value ?? "#BA0000"; break;
                 case "language": settings.Language = value ?? "en"; break;
+                case "daily_goal": settings.DailyScrobbleGoal = int.TryParse(value, out var dg) ? dg : 0; break;
             }
         }
         return settings;
@@ -95,8 +94,6 @@ public class Database : IDisposable
             "INSERT OR REPLACE INTO settings (key, value) VALUES (@k, @v)",
             ("@k", key), ("@v", value));
 
-        Set("api_key", s.ApiKey);
-        Set("api_secret", s.ApiSecret);
         Set("session_key", s.SessionKey);
         Set("username", s.Username);
         Set("scrobble_threshold_pct", s.ScrobbleThresholdPercent.ToString());
@@ -110,6 +107,7 @@ public class Database : IDisposable
         Set("duplicate_window_min", s.DuplicateWindowMinutes.ToString());
         Set("accent_color", s.AccentColor);
         Set("language", s.Language);
+        Set("daily_goal", s.DailyScrobbleGoal.ToString());
     }
 
     // ── Normalization Rules ─────────────────────────────────────────────────
@@ -260,6 +258,91 @@ public class Database : IDisposable
         using var r = cmd.ExecuteReader();
         while (r.Read()) list.Add((r.GetString(0), r.GetString(1), r.GetInt32(2)));
         return list.ToArray();
+    }
+
+    public void UpdateScrobbleRecord(int id, string artist, string title, string album)
+    {
+        Execute("UPDATE scrobble_history SET artist=@a, title=@t, album=@al WHERE id=@id",
+            ("@a", artist), ("@t", title), ("@al", album), ("@id", id.ToString()));
+    }
+
+    public int GetCurrentStreak()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT date(scrobbled_at, 'localtime') as day
+            FROM scrobble_history WHERE success=1
+            GROUP BY day ORDER BY day DESC";
+        var days = new List<DateTime>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            if (!r.IsDBNull(0)) days.Add(DateTime.Parse(r.GetString(0)).Date);
+        }
+        if (days.Count == 0) return 0;
+        if ((DateTime.Today - days[0]).TotalDays >= 2) return 0;
+        int streak = 0;
+        var expected = days[0];
+        foreach (var day in days)
+        {
+            if (day == expected) { streak++; expected = expected.AddDays(-1); }
+            else break;
+        }
+        return streak;
+    }
+
+    public void ExportToCsv(string path)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT artist, title, album, scrobbled_at FROM scrobble_history WHERE success=1 ORDER BY scrobbled_at DESC";
+        using var r = cmd.ExecuteReader();
+        using var w = new System.IO.StreamWriter(path, false, System.Text.Encoding.UTF8);
+        w.WriteLine("Artist,Title,Album,ScrobbledAt");
+        while (r.Read())
+            w.WriteLine($"\"{Esc(r.GetString(0))}\",\"{Esc(r.GetString(1))}\",\"{Esc(r.GetString(2))}\",\"{r.GetString(3)}\"");
+        static string Esc(string s) => s.Replace("\"", "\"\"");
+    }
+
+    public int ImportFromCsv(string path)
+    {
+        var lines = System.IO.File.ReadAllLines(path, System.Text.Encoding.UTF8);
+        int imported = 0;
+        foreach (var line in lines.Skip(1))
+        {
+            var parts = ParseCsvLine(line);
+            if (parts.Length < 4) continue;
+            try
+            {
+                var at = DateTime.Parse(parts[3]);
+                using var chk = _conn.CreateCommand();
+                chk.CommandText = "SELECT COUNT(*) FROM scrobble_history WHERE lower(artist)=lower(@a) AND lower(title)=lower(@t) AND scrobbled_at=@s";
+                chk.Parameters.AddWithValue("@a", parts[0]);
+                chk.Parameters.AddWithValue("@t", parts[1]);
+                chk.Parameters.AddWithValue("@s", at.ToString("O"));
+                if ((long)chk.ExecuteScalar()! > 0) continue;
+                Execute("INSERT INTO scrobble_history (artist, title, album, scrobbled_at, success) VALUES (@a, @t, @al, @s, 1)",
+                    ("@a", parts[0]), ("@t", parts[1]), ("@al", parts[2]), ("@s", at.ToString("O")));
+                imported++;
+            }
+            catch { }
+        }
+        return imported;
+    }
+
+    private static string[] ParseCsvLine(string line)
+    {
+        var parts = new List<string>();
+        bool inQ = false;
+        var cur = new System.Text.StringBuilder();
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '"') { if (inQ && i + 1 < line.Length && line[i + 1] == '"') { cur.Append('"'); i++; } else inQ = !inQ; }
+            else if (c == ',' && !inQ) { parts.Add(cur.ToString()); cur.Clear(); }
+            else cur.Append(c);
+        }
+        parts.Add(cur.ToString());
+        return parts.ToArray();
     }
 
     // ── Pending Queue ───────────────────────────────────────────────────────

@@ -1,0 +1,17 @@
+{
+  "name": "lastfm-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "ts-md5": "^2.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241224.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.90.0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "lastfm-scrobbler-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dev tools for icon generation",
+  "scripts": {
+    "gen-icon": "node generate-icon.js ../icons-preview/logo.svg ../app.ico"
+  }
+}

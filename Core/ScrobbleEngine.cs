@@ -45,8 +45,7 @@ public class ScrobbleEngine : IDisposable
 
     public void ApplyCredentials()
     {
-        if (!string.IsNullOrEmpty(_settings.ApiKey) && !string.IsNullOrEmpty(_settings.ApiSecret))
-            _lfm.Configure(_settings.ApiKey, _settings.ApiSecret, _settings.SessionKey);
+        _lfm.Configure(_settings.SessionKey);
     }
 
     public void UpdateSettings(AppSettings settings)

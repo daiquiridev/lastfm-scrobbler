@@ -1,7 +1,7 @@
 # Build outputs
 bin/
 obj/
-publish/
+portable/
 
 # Visual Studio / Rider
 .vs/
@@ -22,14 +22,19 @@ publish/
 Thumbs.db
 desktop.ini
 
-# Installer output
-installer-output/
+# Installer output (compiled .exe and generated manifest — setup.iss and build.ps1 are tracked)
+installer/*.exe
+installer/latest.json
 
 # Secrets / local config
 appsettings.local.*
 secrets.*
 dev.credentials
 *.credentials
+
+# Worker
+worker/node_modules/
+worker/.wrangler/
 
 # Local / third-party folders
 .claude/

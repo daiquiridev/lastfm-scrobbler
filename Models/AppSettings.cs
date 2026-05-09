@@ -2,8 +2,6 @@ namespace LastFmScrobbler.Models;
 
 public class AppSettings
 {
-    public string? ApiKey { get; set; }
-    public string? ApiSecret { get; set; }
     public string? SessionKey { get; set; }
     public string? Username { get; set; }
 
@@ -28,4 +26,6 @@ public class AppSettings
     public string AccentColor { get; set; } = "#BA0000";
 
     public string Language { get; set; } = "en";
+
+    public int DailyScrobbleGoal { get; set; } = 0;
 }

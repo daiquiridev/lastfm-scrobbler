@@ -1,7 +1,4 @@
 using System.Net.Http;
-using System.Security.Cryptography;
-using System.Text;
-using System.Web;
 using LastFmScrobbler.Models;
 using Newtonsoft.Json.Linq;
 
@@ -9,56 +6,48 @@ namespace LastFmScrobbler.Core;
 
 public class LastFmClient
 {
-    private const string ApiBase = "https://ws.audioscrobbler.com/2.0/";
-    private const string AuthUrl = "https://www.last.fm/api/auth/";
+    // Update this constant after deploying the Cloudflare Worker.
+    private const string WorkerUrl = "https://proxy.lastfm.spacechild.dev/";
 
     private readonly HttpClient _http = new();
-    private string _apiKey = string.Empty;
-    private string _apiSecret = string.Empty;
     private string? _sessionKey;
 
     public bool IsAuthenticated => !string.IsNullOrEmpty(_sessionKey);
 
-    public void Configure(string apiKey, string apiSecret, string? sessionKey)
+    public void Configure(string? sessionKey)
     {
-        _apiKey = apiKey;
-        _apiSecret = apiSecret;
         _sessionKey = sessionKey;
     }
 
     // ── Auth Flow ────────────────────────────────────────────────────────────
 
-    /// <summary>Step 1: Get a token and return the URL for the user to authorize.</summary>
     public async Task<(string token, string authUrl)> GetAuthUrlAsync()
     {
         var result = await CallAsync(new Dictionary<string, string>
         {
             ["method"] = "auth.getToken",
-            ["api_key"] = _apiKey
         }, signed: false);
 
         var token = result["token"]?.ToString()
             ?? throw new Exception("No token returned from Last.fm");
+        var url = result["_authUrl"]?.ToString()
+            ?? throw new Exception("No auth URL returned from proxy");
 
-        var url = $"{AuthUrl}?api_key={_apiKey}&token={token}";
         return (token, url);
     }
 
-    /// <summary>Step 2: Exchange the authorized token for a session key.</summary>
     public async Task<(string sessionKey, string username)> GetSessionAsync(string token)
     {
         var result = await CallAsync(new Dictionary<string, string>
         {
             ["method"] = "auth.getSession",
-            ["api_key"] = _apiKey,
-            ["token"] = token
+            ["token"]  = token,
         }, signed: true);
 
         var session = result["session"]
             ?? throw new Exception("No session in response");
 
-        var sk = session["key"]?.ToString()
-            ?? throw new Exception("No session key");
+        var sk   = session["key"]?.ToString()  ?? throw new Exception("No session key");
         var name = session["name"]?.ToString() ?? string.Empty;
 
         _sessionKey = sk;
@@ -67,20 +56,15 @@ public class LastFmClient
 
     // ── Track Info ───────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Looks up the canonical album name from Last.fm for a given artist + track.
-    /// Returns null if not found or on error.
-    /// </summary>
     public async Task<string?> GetAlbumNameAsync(string artist, string title)
     {
         try
         {
             var result = await CallAsync(new Dictionary<string, string>
             {
-                ["method"]  = "track.getInfo",
-                ["api_key"] = _apiKey,
-                ["artist"]  = artist,
-                ["track"]   = title,
+                ["method"]      = "track.getInfo",
+                ["artist"]      = artist,
+                ["track"]       = title,
                 ["autocorrect"] = "1",
             }, signed: false);
 
@@ -99,11 +83,10 @@ public class LastFmClient
         if (!IsAuthenticated) return;
         await CallAsync(new Dictionary<string, string>
         {
-            ["method"]  = "track.love",
-            ["api_key"] = _apiKey,
-            ["sk"]      = _sessionKey!,
-            ["artist"]  = artist,
-            ["track"]   = title,
+            ["method"] = "track.love",
+            ["sk"]     = _sessionKey!,
+            ["artist"] = artist,
+            ["track"]  = title,
         }, signed: true);
     }
 
@@ -112,11 +95,10 @@ public class LastFmClient
         if (!IsAuthenticated) return;
         await CallAsync(new Dictionary<string, string>
         {
-            ["method"]  = "track.unlove",
-            ["api_key"] = _apiKey,
-            ["sk"]      = _sessionKey!,
-            ["artist"]  = artist,
-            ["track"]   = title,
+            ["method"] = "track.unlove",
+            ["sk"]     = _sessionKey!,
+            ["artist"] = artist,
+            ["track"]  = title,
         }, signed: true);
     }
 
@@ -129,10 +111,9 @@ public class LastFmClient
         var p = new Dictionary<string, string>
         {
             ["method"] = "track.updateNowPlaying",
-            ["api_key"] = _apiKey,
-            ["sk"] = _sessionKey!,
+            ["sk"]     = _sessionKey!,
             ["artist"] = track.Artist,
-            ["track"] = track.Title,
+            ["track"]  = track.Title,
         };
         if (!string.IsNullOrEmpty(track.Album)) p["album"] = track.Album;
         if (track.DurationSeconds.HasValue) p["duration"] = track.DurationSeconds.Value.ToString();
@@ -146,31 +127,28 @@ public class LastFmClient
 
         var p = new Dictionary<string, string>
         {
-            ["method"] = "track.scrobble",
-            ["api_key"] = _apiKey,
-            ["sk"] = _sessionKey!,
-            ["artist[0]"] = track.Artist,
-            ["track[0]"] = track.Title,
+            ["method"]       = "track.scrobble",
+            ["sk"]           = _sessionKey!,
+            ["artist[0]"]    = track.Artist,
+            ["track[0]"]     = track.Title,
             ["timestamp[0]"] = ((DateTimeOffset)playedAt.ToUniversalTime()).ToUnixTimeSeconds().ToString(),
         };
         if (!string.IsNullOrEmpty(track.Album)) p["album[0]"] = track.Album;
         if (track.DurationSeconds.HasValue) p["duration[0]"] = track.DurationSeconds.Value.ToString();
 
-        var result = await CallAsync(p, signed: true);
+        var result   = await CallAsync(p, signed: true);
         var accepted = result.SelectToken("scrobbles.@attr.accepted");
         return accepted?.Value<int>() == 1;
     }
 
-    /// <summary>Scrobble up to 50 tracks in one API call. Returns the number accepted.</summary>
     public async Task<int> ScrobbleBatchAsync(List<(Track track, DateTime playedAt)> items)
     {
         if (!IsAuthenticated || items.Count == 0) return 0;
 
         var p = new Dictionary<string, string>
         {
-            ["method"]  = "track.scrobble",
-            ["api_key"] = _apiKey,
-            ["sk"]      = _sessionKey!,
+            ["method"] = "track.scrobble",
+            ["sk"]     = _sessionKey!,
         };
 
         for (int i = 0; i < items.Count; i++)
@@ -187,46 +165,131 @@ public class LastFmClient
         return accepted?.Value<int>() ?? 0;
     }
 
-    // ── HTTP / Signature ─────────────────────────────────────────────────────
+    // ── Artist Info ──────────────────────────────────────────────────────────
+
+    public async Task<(string bio, string[] similar)> GetArtistInfoAsync(string artist)
+    {
+        try
+        {
+            var result = await CallAsync(new Dictionary<string, string>
+            {
+                ["method"]      = "artist.getInfo",
+                ["artist"]      = artist,
+                ["autocorrect"] = "1",
+            }, signed: false);
+            var bio = result.SelectToken("artist.bio.summary")?.ToString() ?? "";
+            bio = System.Text.RegularExpressions.Regex.Replace(bio, @"<a\s[^>]*>.*?</a>", "", System.Text.RegularExpressions.RegexOptions.Singleline);
+            bio = System.Text.RegularExpressions.Regex.Replace(bio, "<[^>]+>", "").Trim();
+            var nl = bio.IndexOf('\n'); if (nl > 0) bio = bio[..nl].Trim();
+            if (bio.Length > 280) bio = bio[..280].TrimEnd() + "…";
+            var similar = result.SelectToken("artist.similar.artist")
+                ?.Select(t => t["name"]?.ToString() ?? "").Where(n => n.Length > 0).Take(4).ToArray() ?? [];
+            return (bio, similar);
+        }
+        catch { return ("", []); }
+    }
+
+    public async Task<string[]> GetArtistTopTagsAsync(string artist)
+    {
+        try
+        {
+            var result = await CallAsync(new Dictionary<string, string>
+            {
+                ["method"]      = "artist.getTopTags",
+                ["artist"]      = artist,
+                ["autocorrect"] = "1",
+            }, signed: false);
+            return result.SelectToken("toptags.tag")
+                ?.Select(t => t["name"]?.ToString() ?? "").Where(n => n.Length > 0).Take(5).ToArray() ?? [];
+        }
+        catch { return []; }
+    }
+
+    // ── User Stats ───────────────────────────────────────────────────────────
+
+    public async Task<(string name, int playcount)[]> GetUserTopArtistsAsync(string username, string period, int limit = 10)
+    {
+        try
+        {
+            var result = await CallAsync(new Dictionary<string, string>
+            {
+                ["method"] = "user.getTopArtists",
+                ["user"]   = username,
+                ["period"] = period,
+                ["limit"]  = limit.ToString(),
+            }, signed: false);
+            return result.SelectToken("topartists.artist")
+                ?.Select(t => (t["name"]?.ToString() ?? "", int.TryParse(t["playcount"]?.ToString(), out var pc) ? pc : 0))
+                .Where(x => x.Item1.Length > 0).ToArray() ?? [];
+        }
+        catch { return []; }
+    }
+
+    public async Task<(string artist, string name, int playcount)[]> GetUserTopTracksAsync(string username, string period, int limit = 10)
+    {
+        try
+        {
+            var result = await CallAsync(new Dictionary<string, string>
+            {
+                ["method"] = "user.getTopTracks",
+                ["user"]   = username,
+                ["period"] = period,
+                ["limit"]  = limit.ToString(),
+            }, signed: false);
+            return result.SelectToken("toptracks.track")
+                ?.Select(t => (
+                    t["artist"]?["name"]?.ToString() ?? "",
+                    t["name"]?.ToString() ?? "",
+                    int.TryParse(t["playcount"]?.ToString(), out var pc) ? pc : 0))
+                .Where(x => x.Item2.Length > 0).ToArray() ?? [];
+        }
+        catch { return []; }
+    }
+
+    // ── Friends ──────────────────────────────────────────────────────────────
+
+    public async Task<(string name, string artist, string track, bool nowPlaying)[]> GetFriendsAsync(string username)
+    {
+        try
+        {
+            var result = await CallAsync(new Dictionary<string, string>
+            {
+                ["method"]       = "user.getFriends",
+                ["user"]         = username,
+                ["recenttracks"] = "1",
+                ["limit"]        = "50",
+            }, signed: false);
+            var users = result.SelectToken("friends.user");
+            if (users is null) return [];
+            return users.Select(u =>
+            {
+                var name   = u["name"]?.ToString() ?? "";
+                var rt     = u["recenttrack"];
+                var artist = rt?["artist"]?["#text"]?.ToString() ?? "";
+                var track  = rt?["name"]?.ToString() ?? "";
+                var np     = rt?["@attr"]?["nowplaying"]?.ToString() == "true";
+                return (name, artist, track, np);
+            }).Where(x => x.name.Length > 0).ToArray();
+        }
+        catch { return []; }
+    }
+
+    // ── HTTP ─────────────────────────────────────────────────────────────────
 
     private async Task<JObject> CallAsync(Dictionary<string, string> parameters, bool signed)
     {
-        if (signed)
-        {
-            var sig = BuildSignature(parameters);
-            parameters["api_sig"] = sig;
-        }
-        parameters["format"] = "json";
+        if (signed) parameters["_sign"] = "1";
 
         var content = new FormUrlEncodedContent(parameters.Select(p =>
             new KeyValuePair<string, string>(p.Key, p.Value)));
 
-        var response = await _http.PostAsync(ApiBase, content);
-        var json = await response.Content.ReadAsStringAsync();
-        var obj = JObject.Parse(json);
+        var response = await _http.PostAsync(WorkerUrl, content);
+        var json     = await response.Content.ReadAsStringAsync();
+        var obj      = JObject.Parse(json);
 
         if (obj["error"] is JToken err)
             throw new Exception($"Last.fm error {err}: {obj["message"]}");
 
         return obj;
-    }
-
-    private string BuildSignature(Dictionary<string, string> parameters)
-    {
-        // Signature = MD5( sorted_key+value pairs concatenated + secret )
-        var sorted = parameters
-            .Where(p => p.Key != "format" && p.Key != "callback")
-            .OrderBy(p => p.Key, StringComparer.Ordinal);
-
-        var sb = new StringBuilder();
-        foreach (var (key, value) in sorted)
-        {
-            sb.Append(key);
-            sb.Append(value);
-        }
-        sb.Append(_apiSecret);
-
-        var bytes = MD5.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

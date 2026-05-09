@@ -6,14 +6,19 @@ namespace LastFmScrobbler.UI;
 
 public class TrayApp : ApplicationContext
 {
-    private readonly Database _db;
-    private readonly ScrobbleEngine _engine;
-    private readonly AppSettings _settings;
-    private readonly NotifyIcon _tray;
+    private readonly Database        _db;
+    private readonly ScrobbleEngine  _engine;
+    private readonly AppSettings     _settings;
+    private readonly NotifyIcon      _tray;
+    private readonly MainForm        _mainForm;
+    private readonly HotkeyManager   _hotkeys;
+    private readonly UpdateChecker   _updater = new();
     private readonly ToolStripMenuItem _nowPlayingItem;
     private readonly ToolStripMenuItem _scrobbleCountItem;
-    private readonly MainForm _mainForm;
-    private int _sessionScrobbles;
+    private readonly ToolStripMenuItem _copyNowPlayingItem;
+    private readonly ToolStripMenuItem _updateItem;
+    private int    _sessionScrobbles;
+    private Track? _currentTrack;
 
     public TrayApp(Database db, ScrobbleEngine engine, AppSettings settings)
     {
@@ -22,17 +27,25 @@ public class TrayApp : ApplicationContext
         _settings = settings;
 
         _mainForm = new MainForm(_db, _engine, _settings);
-        _ = _mainForm.Handle; // force handle creation so Invoke() works before first Show()
+        _ = _mainForm.Handle;
 
-        _nowPlayingItem    = new ToolStripMenuItem("Not playing") { Enabled = false };
-        _scrobbleCountItem = new ToolStripMenuItem("0 scrobbles this session") { Enabled = false };
+        _nowPlayingItem     = new ToolStripMenuItem("Not playing") { Enabled = false };
+        _scrobbleCountItem  = new ToolStripMenuItem("0 scrobbles this session") { Enabled = false };
+        _copyNowPlayingItem = new ToolStripMenuItem("Copy Now Playing\tCtrl+Alt+C");
+        _copyNowPlayingItem.Click += (_, _) => CopyNowPlaying();
+
+        _updateItem = new ToolStripMenuItem("Check for Updates");
+        _updateItem.Click += OnUpdateItemClicked;
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(_nowPlayingItem);
         menu.Items.Add(_scrobbleCountItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(_copyNowPlayingItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Monitor",  null, (_, _) => _mainForm.ShowMonitor());
         menu.Items.Add("Settings", null, (_, _) => _mainForm.ShowSettings());
+        menu.Items.Add(_updateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => ExitApp());
 
@@ -50,22 +63,115 @@ public class TrayApp : ApplicationContext
         _engine.ConfirmBeforeScrobble = async track =>
         {
             bool result = false;
-            await Task.Run(() =>
+            await Task.Run(() => _mainForm.Invoke(() =>
             {
-                _mainForm.Invoke(() =>
-                {
-                    using var form = new EditTrackForm(track);
-                    result = form.ShowDialog() == DialogResult.OK;
-                });
-            });
+                using var form = new EditTrackForm(track);
+                result = form.ShowDialog() == DialogResult.OK;
+            }));
             return result;
         };
 
         _engine.NowPlayingChanged += OnNowPlayingChanged;
         _engine.TrackScrobbled   += OnTrackScrobbled;
 
+        // Global hotkeys: Ctrl+Alt+L = Love, Ctrl+Alt+C = Copy
+        _hotkeys = new HotkeyManager();
+        _hotkeys.Register(Keys.L, () => _mainForm.Invoke(() => _mainForm.ToggleLoveCurrentTrack()));
+        _hotkeys.Register(Keys.C, () => _mainForm.Invoke(() => CopyNowPlaying()));
+
         _mainForm.ShowMonitor();
         _ = StartEngineAsync();
+        _ = CheckForUpdateAsync(onStartup: true);
+    }
+
+    // ── Update ────────────────────────────────────────────────────────────────
+
+    private UpdateChecker.UpdateInfo? _pendingUpdate;
+
+    private async Task CheckForUpdateAsync(bool onStartup = false)
+    {
+        if (onStartup) await Task.Delay(TimeSpan.FromSeconds(20));
+
+        _updateItem.Text    = "Checking for updates…";
+        _updateItem.Enabled = false;
+
+        var info = await _updater.CheckAsync();
+
+        if (_tray.ContextMenuStrip!.InvokeRequired)
+        { _tray.ContextMenuStrip.Invoke(() => ApplyUpdateResult(info)); }
+        else
+        { ApplyUpdateResult(info); }
+    }
+
+    private void ApplyUpdateResult(UpdateChecker.UpdateInfo? info)
+    {
+        if (info is null)
+        {
+            _updateItem.Text    = "Check for Updates";
+            _updateItem.Enabled = true;
+            _pendingUpdate      = null;
+            return;
+        }
+
+        _pendingUpdate      = info;
+        _updateItem.Text    = $"Install Update v{info.Version}…";
+        _updateItem.Enabled = true;
+
+        _tray.ShowBalloonTip(
+            8000,
+            "Update available",
+            $"Last.fm Scrobbler v{info.Version} is ready. Right-click the tray icon to install.",
+            ToolTipIcon.Info);
+    }
+
+    private async void OnUpdateItemClicked(object? sender, EventArgs e)
+    {
+        if (_pendingUpdate is null)
+        {
+            await CheckForUpdateAsync(onStartup: false);
+            return;
+        }
+
+        await DoInstallAsync(_pendingUpdate);
+    }
+
+    private async Task DoInstallAsync(UpdateChecker.UpdateInfo info)
+    {
+        _updateItem.Text    = "Downloading…";
+        _updateItem.Enabled = false;
+
+        try
+        {
+            var progress = new Progress<int>(pct =>
+            {
+                if (_tray.ContextMenuStrip!.InvokeRequired)
+                    _tray.ContextMenuStrip.Invoke(() => _updateItem.Text = $"Downloading… {pct}%");
+                else
+                    _updateItem.Text = $"Downloading… {pct}%";
+            });
+
+            var path = await _updater.DownloadAsync(info, progress);
+            UpdateChecker.LaunchAndExit(path);
+            ExitApp();
+        }
+        catch (Exception ex)
+        {
+            _updateItem.Text    = $"Install Update v{info.Version}…";
+            _updateItem.Enabled = true;
+            _tray.ShowBalloonTip(5000, "Update failed", ex.Message, ToolTipIcon.Error);
+        }
+    }
+
+    // ── Engine & tray ─────────────────────────────────────────────────────────
+
+    private void CopyNowPlaying()
+    {
+        if (_currentTrack is null) return;
+        var text = string.IsNullOrEmpty(_currentTrack.Album)
+            ? $"{_currentTrack.Artist} — {_currentTrack.Title}"
+            : $"{_currentTrack.Artist} — {_currentTrack.Title} ({_currentTrack.Album})";
+        Clipboard.SetText(text);
+        _tray.ShowBalloonTip(1500, "Copied", text, ToolTipIcon.None);
     }
 
     private async Task StartEngineAsync()
@@ -73,12 +179,9 @@ public class TrayApp : ApplicationContext
         try
         {
             await _engine.StartAsync();
-
             if (!_engine.IsAuthenticated)
-            {
                 _tray.ShowBalloonTip(4000, "Last.fm Scrobbler",
                     "Not authenticated. Right-click → Settings to log in.", ToolTipIcon.Info);
-            }
         }
         catch (Exception ex)
         {
@@ -89,21 +192,22 @@ public class TrayApp : ApplicationContext
     private void OnNowPlayingChanged(object? sender, Track? track)
     {
         if (_tray.ContextMenuStrip!.InvokeRequired)
-        {
-            _tray.ContextMenuStrip.Invoke(() => OnNowPlayingChanged(sender, track));
-            return;
-        }
+        { _tray.ContextMenuStrip.Invoke(() => OnNowPlayingChanged(sender, track)); return; }
+
+        _currentTrack = track;
 
         if (track is null)
         {
-            _nowPlayingItem.Text = "Not playing";
-            _tray.Text = "Last.fm Scrobbler";
+            _nowPlayingItem.Text        = "Not playing";
+            _copyNowPlayingItem.Enabled = false;
+            _tray.Text                  = "Last.fm Scrobbler";
         }
         else
         {
             var display = $"{track.Artist} – {track.Title}";
-            _nowPlayingItem.Text = Truncate(display, 60);
-            _tray.Text = Truncate($"♪ {display}", 63);
+            _nowPlayingItem.Text        = Truncate(display, 60);
+            _copyNowPlayingItem.Enabled = true;
+            _tray.Text                  = Truncate($"♪ {display}", 63);
 
             if (_settings.ShowNowPlayingNotification)
                 _tray.ShowBalloonTip(2000, "Now Playing", display, ToolTipIcon.None);
@@ -113,10 +217,7 @@ public class TrayApp : ApplicationContext
     private void OnTrackScrobbled(object? sender, (Track track, bool success) e)
     {
         if (_tray.ContextMenuStrip!.InvokeRequired)
-        {
-            _tray.ContextMenuStrip.Invoke(() => OnTrackScrobbled(sender, e));
-            return;
-        }
+        { _tray.ContextMenuStrip.Invoke(() => OnTrackScrobbled(sender, e)); return; }
 
         if (e.success)
         {
@@ -127,6 +228,7 @@ public class TrayApp : ApplicationContext
 
     private void ExitApp()
     {
+        _hotkeys.Dispose();
         _tray.Visible = false;
         _mainForm.Dispose();
         _engine.Dispose();
