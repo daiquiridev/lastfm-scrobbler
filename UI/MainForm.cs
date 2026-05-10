@@ -45,7 +45,7 @@ public class MainForm : Form
     private ProgressBar _monBar        = null!;
     private Label       _monStatus     = null!;
     private Label       _monEta        = null!;
-    private ListBox     _monLog        = null!;
+    private LogList     _monLog        = null!;
     private PictureBox  _albumArt      = null!;
     private Button      _loveBtn       = null!;
     private Label       _monQuickToday = null!;
@@ -357,11 +357,11 @@ public class MainForm : Form
         var line         = new Label { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(35, 35, 35) };
         var logLbl       = SectionLabel("LOG");
 
-        _monLog = new ListBox
+        _monLog = new LogList
         {
-            Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 18, 18),
-            ForeColor = Color.FromArgb(90, 90, 90), BorderStyle = BorderStyle.None,
-            SelectionMode = SelectionMode.None, Font = new Font("Consolas", 8.5f),
+            Dock      = DockStyle.Fill,
+            BackColor = Color.FromArgb(18, 18, 18),
+            Accent    = _cAccent,
         };
 
         var logCol = new Panel { Dock = DockStyle.Fill, BackColor = CMain };
@@ -566,7 +566,7 @@ public class MainForm : Form
         _db.UpdateScrobbleRecord(id, fakeTrack.Artist, fakeTrack.Title, fakeTrack.Album);
         _ = _engine.ManualScrobbleAsync(fakeTrack.Artist, fakeTrack.Title, fakeTrack.Album, DateTime.Now);
         LoadHistory();
-        AppendLog($"✎  {fakeTrack.Artist} — {fakeTrack.Title}  (rescrobbled)");
+        AppendLog(LogKind.Manual, $"{fakeTrack.Artist} — {fakeTrack.Title}");
     }
 
     private void ExportCsvClicked(object? sender, EventArgs e)
@@ -1505,7 +1505,7 @@ public class MainForm : Form
         _scrobbled = false; _startedAt = track.DetectedAt; _threshMs = _engine.GetScrobbleThresholdMs(track);
         _monTitle.Text = track.Title; _monArtist.Text = track.Artist;
         SetStatus(Loc.T("WaitingToScrobble"), Color.FromArgb(200, 160, 0));
-        AppendLog($"▶  {track.Artist} — {track.Title}");
+        AppendLog(LogKind.NowPlaying, $"{track.Artist} — {track.Title}");
         SetLoveBtn(enabled: _engine.IsAuthenticated, loved: false);
         _trackLoved = false;
 
@@ -1579,12 +1579,12 @@ public class MainForm : Form
         {
             SetStatus(Loc.T("ScrobbledOk"), Color.FromArgb(80, 200, 80));
             _monBar.Value = 100;
-            AppendLog($"✓  {e.track.Artist} — {e.track.Title}  [{e.track.Album}]");
+            AppendLog(LogKind.Scrobbled, $"{e.track.Artist} — {e.track.Title}");
         }
         else
         {
             SetStatus(Loc.T("ScrobbleFailed"), Color.FromArgb(220, 60, 60));
-            AppendLog($"✗  {e.track.Artist} — {e.track.Title}");
+            AppendLog(LogKind.Failed, $"{e.track.Artist} — {e.track.Title}");
         }
         RefreshMonitorStats();
     }
@@ -1592,7 +1592,7 @@ public class MainForm : Form
     private void OnQueueFlushed(object? sender, int count)
     {
         if (InvokeRequired) { Invoke(() => OnQueueFlushed(sender, count)); return; }
-        AppendLog($"⬆  {string.Format(Loc.T("QueueFlushed"), count)}");
+        AppendLog(LogKind.QueueFlushed, string.Format(Loc.T("QueueFlushed"), count));
         RefreshMonitorStats();
     }
 
@@ -1621,17 +1621,12 @@ public class MainForm : Form
         _trackLoved      = !_trackLoved;
         SetLoveBtn(enabled: false, loved: _trackLoved);
         await _engine.LoveTrackAsync(_currentTrack, _trackLoved);
-        AppendLog(_trackLoved
-            ? $"♥  {_currentTrack.Artist} — {_currentTrack.Title}"
-            : $"♡  {_currentTrack.Artist} — {_currentTrack.Title}");
+        AppendLog(_trackLoved ? LogKind.Loved : LogKind.Unloved,
+                  $"{_currentTrack.Artist} — {_currentTrack.Title}");
         _loveBtn.Enabled = _engine.IsAuthenticated;
     }
 
-    private void AppendLog(string msg)
-    {
-        _monLog.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {msg}");
-        if (_monLog.Items.Count > 50) _monLog.Items.RemoveAt(50);
-    }
+    private void AppendLog(LogKind kind, string text) => _monLog.AddEntry(kind, text);
 
     // ── History Events ────────────────────────────────────────────────────────
 
@@ -1641,9 +1636,8 @@ public class MainForm : Form
         if (form.ShowDialog(this) != DialogResult.OK) return;
         bool ok = await _engine.ManualScrobbleAsync(form.Artist, form.TrackTitle, form.Album, form.PlayedAt);
         LoadHistory(); RefreshStats();
-        AppendLog(ok
-            ? $"✓  Manuel: {form.Artist} — {form.TrackTitle}"
-            : $"✗  Manuel başarısız: {form.Artist} — {form.TrackTitle}");
+        AppendLog(ok ? LogKind.Manual : LogKind.Failed,
+                  $"{form.Artist} — {form.TrackTitle}");
     }
 
     // ── Settings ──────────────────────────────────────────────────────────────
@@ -1789,6 +1783,7 @@ public class MainForm : Form
         _monBar.ForeColor    = c;
         foreach (var btn in _accentBtns) btn.BackColor = c;
         if (_activeNavBtn is not null) _activeNavBtn.BackColor = c;
+        if (_monLog       is not null) { _monLog.Accent = c; _monLog.Invalidate(); }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

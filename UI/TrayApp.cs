@@ -79,7 +79,12 @@ public class TrayApp : ApplicationContext
         _hotkeys.Register(Keys.L, () => _mainForm.Invoke(() => _mainForm.ToggleLoveCurrentTrack()));
         _hotkeys.Register(Keys.C, () => _mainForm.Invoke(() => CopyNowPlaying()));
 
-        _mainForm.ShowMonitor();
+        // First-run users without a session need to see the login screen — show
+        // the form. Returning users start in tray and can open via double-click
+        // or the tray menu.
+        if (string.IsNullOrEmpty(_settings.SessionKey))
+            _mainForm.ShowMonitor();
+
         _ = StartEngineAsync();
         _ = CheckForUpdateAsync(onStartup: true);
     }
