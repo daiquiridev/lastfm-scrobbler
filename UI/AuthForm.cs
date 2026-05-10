@@ -12,9 +12,9 @@ public class AuthForm : Form
     private string? _pendingToken;
     private Label   _statusLabel    = null!;
     private Button  _openBrowserBtn = null!;
-    private Button  _doneBtn        = null!;
     private System.Windows.Forms.Timer _pollTimer = null!;
     private int _pollAttempts;
+    private const int MaxPollAttempts = 90; // 3 minutes
 
     public AuthForm(LastFmClient client)
     {
@@ -25,7 +25,7 @@ public class AuthForm : Form
     private void InitializeComponent()
     {
         Text            = "Last.fm Authentication";
-        Size            = new Size(440, 240);
+        Size            = new Size(440, 200);
         StartPosition   = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false;
@@ -36,7 +36,7 @@ public class AuthForm : Form
 
         var lbl = new Label
         {
-            Text      = "Click 'Open Browser' to authorize this app on Last.fm.\nThen come back and click 'I've Authorized'.",
+            Text      = "Click 'Open Browser' to authorize this app on Last.fm.\nThe app will detect authorization automatically.",
             Location  = new Point(18, 18),
             Size      = new Size(396, 50),
             ForeColor = Color.FromArgb(180, 180, 180),
@@ -52,22 +52,17 @@ public class AuthForm : Form
         };
 
         _openBrowserBtn = MakeBtn("Open Browser", 150, 34);
-        _openBrowserBtn.Location = new Point(18, 116);
+        _openBrowserBtn.Location = new Point(18, 110);
         _openBrowserBtn.Click   += OpenBrowserClicked;
 
-        _doneBtn = MakeBtn("I've Authorized", 150, 34);
-        _doneBtn.Location = new Point(178, 116);
-        _doneBtn.Enabled  = false;
-        _doneBtn.Click   += DoneClicked;
-
         var cancelBtn = MakeBtn("Cancel", 90, 34);
-        cancelBtn.Location    = new Point(336, 116);
+        cancelBtn.Location     = new Point(178, 110);
         cancelBtn.DialogResult = DialogResult.Cancel;
 
         _pollTimer = new System.Windows.Forms.Timer { Interval = 2000 };
         _pollTimer.Tick += PollTick;
 
-        Controls.AddRange([lbl, _statusLabel, _openBrowserBtn, _doneBtn, cancelBtn]);
+        Controls.AddRange([lbl, _statusLabel, _openBrowserBtn, cancelBtn]);
     }
 
     private static Button MakeBtn(string text, int w, int h) => new()
@@ -95,34 +90,27 @@ public class AuthForm : Form
 
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
 
-            _statusLabel.Text      = "Waiting for authorization...";
-            _doneBtn.Enabled       = true;
+            _statusLabel.Text = "Waiting for authorization in browser...";
+            _pollAttempts     = 0;
+            _pollTimer.Start();
         }
         catch (Exception ex)
         {
-            _statusLabel.Text      = $"Error: {ex.Message}";
-            _statusLabel.ForeColor = Color.FromArgb(220, 60, 60);
+            _statusLabel.Text       = $"Error: {ex.Message}";
+            _statusLabel.ForeColor  = Color.FromArgb(220, 60, 60);
             _openBrowserBtn.Enabled = true;
         }
-    }
-
-    private void DoneClicked(object? sender, EventArgs e)
-    {
-        _doneBtn.Enabled   = false;
-        _statusLabel.Text  = "Verifying...";
-        _pollAttempts      = 0;
-        _pollTimer.Start();
     }
 
     private async void PollTick(object? sender, EventArgs e)
     {
         _pollAttempts++;
-        if (_pollAttempts > 15 || _pendingToken is null)
+        if (_pollAttempts > MaxPollAttempts || _pendingToken is null)
         {
             _pollTimer.Stop();
-            _statusLabel.Text      = "Timed out. Did you authorize in the browser?";
-            _statusLabel.ForeColor = Color.FromArgb(220, 60, 60);
-            _doneBtn.Enabled       = true;
+            _statusLabel.Text       = "Timed out. Click 'Open Browser' to try again.";
+            _statusLabel.ForeColor  = Color.FromArgb(220, 60, 60);
+            _openBrowserBtn.Enabled = true;
             return;
         }
 
@@ -139,7 +127,9 @@ public class AuthForm : Form
         }
         catch
         {
-            _statusLabel.Text = $"Not authorized yet... (attempt {_pollAttempts}/15)";
+            var remaining = MaxPollAttempts - _pollAttempts;
+            _statusLabel.Text      = $"Waiting... ({remaining * 2}s remaining)";
+            _statusLabel.ForeColor = Color.FromArgb(110, 110, 110);
         }
     }
 }

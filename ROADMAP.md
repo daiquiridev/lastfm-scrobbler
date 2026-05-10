@@ -45,3 +45,28 @@
 - Scrobble from local media players (VLC, foobar2000) via plugin
 - Last.fm friends' listening activity in the tray
 - macOS companion app (using MusicKit / MediaPlayer APIs)
+
+---
+
+## Pending / Backlog
+
+### About Page
+- Standard "About this app" layout: app name, version, build date
+- Donation button → spacechild.dev
+- GitHub link, changelog link
+- App description (one paragraph)
+
+### Better Navigation & Menu Structure
+- Account page is currently thin (login only) — options:
+  - Merge Account into Settings as "Account & Settings"
+  - Or keep separate but enrich with Last.fm profile info (avatar, total scrobbles, member since)
+- Add About as a dedicated nav item
+- Consider grouping: Monitor | History | Stats | Friends | Settings (with Account + About inside)
+
+### Richer Account Page
+- Show Last.fm profile picture, total scrobble count, member since (via `user.getInfo`)
+- Auto-show login prompt on first run when no session is stored
+
+### Custom Domain for Updates
+- R2 currently at `pub-8a5464b225534730b481b262ffe4748b.r2.dev`
+- Move to `updates.lastfm.spacechild.dev` (add CNAME in Cloudflare, update `UpdateChecker.ManifestUrl` + `build.ps1`)
