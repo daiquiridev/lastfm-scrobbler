@@ -10,11 +10,9 @@
 
 ## The Problem
 
-Apple Music arrived on Windows as a Microsoft Store app in 2023. However, **the official Last.fm desktop app does not detect Apple Music on Windows** — it was never updated to support the new Store version. Audioscrobbler-based solutions like the legacy Last.fm app only work with iTunes.
+Apple Music arrived on Windows as a Microsoft Store app in 2023. However, **the official Last.fm desktop app does not detect Apple Music on Windows** — it was never updated to support the new Store version, and Audioscrobbler-based solutions like the legacy Last.fm Scrobbler only work with iTunes.
 
-This app fills that gap using the **Windows System Media Transport Controls (SMTC) API**, the same interface Windows uses for the media overlay (Win+K), which Apple Music properly integrates with.
-
-This app fills that gap and works with **Apple Music for Windows**, **iTunes**, and any other media player that registers with SMTC — including Spotify, VLC, and others.
+This app fills that gap using the **Windows System Media Transport Controls (SMTC) API** — the same interface Windows uses for its media overlay (Win+K) — which Apple Music properly integrates with. It works with **Apple Music for Windows**, **iTunes**, and any other media player that registers with SMTC, including **Spotify**, **VLC**, **foobar2000**, and others.
 
 ---
 
@@ -155,6 +153,34 @@ The published executable will be at `publish/LastFmScrobbler.exe`.
 Apple Music on Windows registers itself with the Windows SMTC (System Media Transport Controls) API. This app listens to SMTC events to detect track changes.
 
 One quirk: Apple Music's SMTC implementation combines the artist and album title into a single field using an em dash separator (`Artist — Album`). This app parses that field correctly and additionally queries the Last.fm `track.getInfo` API to resolve the canonical album name.
+
+---
+
+## FAQ
+
+### Why doesn't the official Last.fm app scrobble Apple Music on Windows?
+The official Last.fm desktop app was last meaningfully updated before Apple Music launched on Windows in 2023. It hooks into iTunes's COM API and the deprecated Windows Media Player. The new Apple Music app for Windows is a Microsoft Store (UWP) app that exposes its metadata through SMTC, which the official Last.fm client doesn't read.
+
+### Does this app work with Spotify, VLC, or foobar2000?
+Yes — it works with anything that registers with **Windows SMTC**, which is the API behind the system media flyout (Win+K). Spotify, VLC, foobar2000, MusicBee, and most modern Windows players support SMTC. By default the app is filtered to Apple Music; turn off **Filter Apple Music only** in Scrobbling settings to scrobble from any SMTC-compatible player.
+
+### Will it scrobble while the app is in the system tray?
+Yes. The app runs entirely in the background from the system tray — close the window and it keeps scrobbling. Right-click the tray icon to open the monitor or settings.
+
+### Does this need iTunes installed?
+No. This is built specifically for the **Apple Music** app from the Microsoft Store, not iTunes. iTunes also works (it registers with SMTC), but isn't required.
+
+### Is my Last.fm password stored?
+No. Authentication uses Last.fm's web flow — you authorize the app in your browser, and only a session token is stored in a local SQLite file. The token can be revoked from your [Last.fm settings](https://www.last.fm/settings/applications) at any time.
+
+### Does it work offline?
+Track changes are detected offline, and any scrobble that fails to send is queued in the local database. The queue is flushed automatically when the app reconnects (every 5 minutes, and on startup).
+
+### How is this different from Web Scrobbler / browser extensions?
+Browser extensions only scrobble what's playing inside the browser tab. Apple Music, iTunes, foobar2000, and other native players don't run in a browser, so a desktop scrobbler is needed for them. This app handles native players via SMTC; pair it with a browser extension if you also want browser scrobbling.
+
+### Does it support Windows 10?
+Yes — Windows 10 build 19041 (20H1, May 2020) or later. Windows 11 is recommended.
 
 ---
 
