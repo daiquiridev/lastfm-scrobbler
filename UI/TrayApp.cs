@@ -90,38 +90,49 @@ public class TrayApp : ApplicationContext
 
     private async Task CheckForUpdateAsync(bool onStartup = false)
     {
-        if (onStartup) await Task.Delay(TimeSpan.FromSeconds(20));
-
-        _updateItem.Text    = "Checking for updates…";
-        _updateItem.Enabled = false;
-
-        var info = await _updater.CheckAsync();
+        if (onStartup) await Task.Delay(TimeSpan.FromSeconds(5));
 
         if (_tray.ContextMenuStrip!.InvokeRequired)
-        { _tray.ContextMenuStrip.Invoke(() => ApplyUpdateResult(info)); }
+            _tray.ContextMenuStrip.Invoke(() => { _updateItem.Text = "Checking for updates…"; _updateItem.Enabled = false; });
         else
-        { ApplyUpdateResult(info); }
-    }
+            { _updateItem.Text = "Checking for updates…"; _updateItem.Enabled = false; }
 
-    private void ApplyUpdateResult(UpdateChecker.UpdateInfo? info)
-    {
-        if (info is null)
+        UpdateChecker.UpdateInfo? info = null;
+        bool networkError = false;
+        try { info = await _updater.CheckAsync(); }
+        catch { networkError = true; }
+
+        void Apply()
         {
-            _updateItem.Text    = "Check for Updates";
             _updateItem.Enabled = true;
-            _pendingUpdate      = null;
-            return;
+            if (networkError)
+            {
+                _updateItem.Text = "Check for Updates";
+                if (!onStartup)
+                    _tray.ShowBalloonTip(4000, "Update check failed", "Could not reach the update server.", ToolTipIcon.Warning);
+                return;
+            }
+
+            if (info is null)
+            {
+                _updateItem.Text = "Check for Updates";
+                if (!onStartup)
+                    _tray.ShowBalloonTip(3000, "You're up to date", $"Last.fm Scrobbler v{Application.ProductVersion} is the latest version.", ToolTipIcon.Info);
+                _pendingUpdate = null;
+                return;
+            }
+
+            _pendingUpdate     = info;
+            _updateItem.Text   = $"Install Update v{info.Version}…";
+            _tray.ShowBalloonTip(
+                8000,
+                "Update available",
+                $"Last.fm Scrobbler v{info.Version} is ready. Right-click the tray icon to install.",
+                ToolTipIcon.Info);
         }
 
-        _pendingUpdate      = info;
-        _updateItem.Text    = $"Install Update v{info.Version}…";
-        _updateItem.Enabled = true;
-
-        _tray.ShowBalloonTip(
-            8000,
-            "Update available",
-            $"Last.fm Scrobbler v{info.Version} is ready. Right-click the tray icon to install.",
-            ToolTipIcon.Info);
+        if (_tray.ContextMenuStrip!.InvokeRequired) _tray.ContextMenuStrip.Invoke(Apply);
+        else Apply();
     }
 
     private async void OnUpdateItemClicked(object? sender, EventArgs e)
