@@ -26,6 +26,7 @@ public class MainForm : Form
     private NavButton _btnNorm     = null!;
     private NavButton _btnStats    = null!;
     private NavButton _btnFriends  = null!;
+    private NavButton _btnAbout    = null!;
 
     private Panel _content      = null!;
     private Panel _pageMonitor  = null!;
@@ -35,6 +36,7 @@ public class MainForm : Form
     private Panel _pageNorm     = null!;
     private Panel _pageStats    = null!;
     private Panel _pageFriends  = null!;
+    private Panel _pageAbout    = null!;
 
     // Monitor page
     private Label       _monTitle      = null!;
@@ -137,6 +139,7 @@ public class MainForm : Form
         BuildNormPage();
         BuildStatsPage();
         BuildFriendsPage();
+        BuildAboutPage();
         LoadSettings();
         LoadRules();
 
@@ -176,6 +179,7 @@ public class MainForm : Form
         _btnAccount  = NavBtn(Loc.T("NavAccount"),       "◉");
         _btnScrobble = NavBtn(Loc.T("NavScrobbling"),    "⚙");
         _btnNorm     = NavBtn(Loc.T("NavNormalization"), "≡");
+        _btnAbout    = NavBtn("About",                   "◈");
 
         _btnMonitor.Click  += (_, _) => { Navigate(_pageMonitor,  _btnMonitor);  RefreshMonitorStats(); };
         _btnHistory.Click  += (_, _) => { Navigate(_pageHistory,  _btnHistory);  LoadHistory(); RefreshStats(); };
@@ -184,6 +188,7 @@ public class MainForm : Form
         _btnAccount.Click  += (_, _) => Navigate(_pageAccount,  _btnAccount);
         _btnScrobble.Click += (_, _) => Navigate(_pageScrobble, _btnScrobble);
         _btnNorm.Click     += (_, _) => Navigate(_pageNorm,     _btnNorm);
+        _btnAbout.Click    += (_, _) => Navigate(_pageAbout,    _btnAbout);
 
         var bugBtn = new Button
         {
@@ -204,6 +209,7 @@ public class MainForm : Form
         bugBtn.Click += (_, _) => OpenUrl("mailto:support@spacechild.dev?subject=Last.fm%20Scrobbler%20Bug");
 
         sidebar.Controls.Add(bugBtn);
+        sidebar.Controls.Add(_btnAbout);
         sidebar.Controls.Add(_btnNorm);
         sidebar.Controls.Add(_btnScrobble);
         sidebar.Controls.Add(_btnAccount);
@@ -221,8 +227,9 @@ public class MainForm : Form
         _pageNorm     = new Panel { BackColor = CMain, Visible = false };
         _pageStats    = new Panel { BackColor = CMain, Visible = false };
         _pageFriends  = new Panel { BackColor = CMain, Visible = false };
+        _pageAbout    = new Panel { BackColor = CMain, Visible = false };
 
-        _content.Controls.AddRange([_pageMonitor, _pageHistory, _pageAccount, _pageScrobble, _pageNorm, _pageStats, _pageFriends]);
+        _content.Controls.AddRange([_pageMonitor, _pageHistory, _pageAccount, _pageScrobble, _pageNorm, _pageStats, _pageFriends, _pageAbout]);
         _content.Resize += (_, _) => SizePages();
 
         var titleBar = BuildTitleBar();
@@ -235,15 +242,15 @@ public class MainForm : Form
     private void SizePages()
     {
         var r = _content.ClientRectangle;
-        foreach (var p in new[] { _pageMonitor, _pageHistory, _pageAccount, _pageScrobble, _pageNorm, _pageStats, _pageFriends })
+        foreach (var p in new[] { _pageMonitor, _pageHistory, _pageAccount, _pageScrobble, _pageNorm, _pageStats, _pageFriends, _pageAbout })
             p.Bounds = r;
     }
 
     private void Navigate(Panel page, NavButton btn)
     {
-        foreach (var p in new[] { _pageMonitor, _pageHistory, _pageAccount, _pageScrobble, _pageNorm, _pageStats, _pageFriends })
+        foreach (var p in new[] { _pageMonitor, _pageHistory, _pageAccount, _pageScrobble, _pageNorm, _pageStats, _pageFriends, _pageAbout })
             p.Visible = false;
-        foreach (var b in new[] { _btnMonitor, _btnHistory, _btnStats, _btnFriends, _btnAccount, _btnScrobble, _btnNorm })
+        foreach (var b in new[] { _btnMonitor, _btnHistory, _btnStats, _btnFriends, _btnAccount, _btnScrobble, _btnNorm, _btnAbout })
         { b.BackColor = Color.Transparent; b.ForeColor = CDim; }
         page.Visible  = true;
         btn.BackColor = _cAccent;
@@ -610,31 +617,6 @@ public class MainForm : Form
         _profileLink.Location     = new Point(lx, y); inner.Controls.Add(_profileLink);     y += 32;
         _authBtn.Location         = new Point(lx, y); inner.Controls.Add(_authBtn);
 
-        y += 52;
-        inner.Controls.Add(new Label
-        {
-            Text = "APP VERSION", Location = new Point(lx, y), Size = new Size(300, 18),
-            ForeColor = Color.FromArgb(70, 70, 70), Font = FontManager.Bold(8f),
-        });
-        y += 22;
-        inner.Controls.Add(new Label
-        {
-            Text      = $"v{Application.ProductVersion}",
-            Location  = new Point(lx, y),
-            Size      = new Size(200, 22),
-            ForeColor = Color.FromArgb(180, 180, 180),
-            Font      = FontManager.Regular(9.5f),
-        });
-
-        var versionHistoryBtn = MakeBtn("Version History", 150, 32);
-        versionHistoryBtn.Location = new Point(lx + 120, y - 4);
-        versionHistoryBtn.Click   += (_, _) =>
-        {
-            using var form = new VersionHistoryForm(new UpdateChecker(), _cAccent);
-            form.ShowDialog(this);
-        };
-        inner.Controls.Add(versionHistoryBtn);
-
         _pageAccount.Controls.Add(inner);
         _pageAccount.Controls.Add(heading);
     }
@@ -746,6 +728,216 @@ public class MainForm : Form
         _pageScrobble.Controls.Add(inner);
         _pageScrobble.Controls.Add(heading);
     }
+
+    // ── About Page ───────────────────────────────────────────────────────────
+
+    private void BuildAboutPage()
+    {
+        var heading = PageHeading("About");
+        heading.Dock = DockStyle.Top;
+
+        var inner = new Panel { Dock = DockStyle.Fill, BackColor = CMain, AutoScroll = true };
+
+        const int lx = 28;
+        int y = 24;
+
+        // ── Hero card ────────────────────────────────────────────────────────
+        var heroCard = new Panel
+        {
+            Location  = new Point(lx, y),
+            Size      = new Size(560, 92),
+            BackColor = Color.FromArgb(19, 19, 19),
+        };
+        heroCard.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(36, 36, 36));
+            e.Graphics.DrawRectangle(pen, 0, 0, heroCard.Width - 1, heroCard.Height - 1);
+        };
+
+        var noteLabel = new Label
+        {
+            Text      = "♪",
+            Location  = new Point(20, 14),
+            Size      = new Size(58, 64),
+            Font      = FontManager.Bold(30f),
+            ForeColor = _cAccent,
+            TextAlign = ContentAlignment.MiddleCenter,
+        };
+
+        var appNameLabel = new Label
+        {
+            Text      = "Last.fm Scrobbler",
+            Location  = new Point(88, 16),
+            Size      = new Size(340, 32),
+            Font      = FontManager.Bold(17f),
+            ForeColor = CFg,
+        };
+
+        var versionLabel = new Label
+        {
+            Text      = $"v{Application.ProductVersion}",
+            Location  = new Point(89, 52),
+            Size      = new Size(72, 22),
+            Font      = FontManager.Regular(8.5f),
+            ForeColor = Color.FromArgb(90, 90, 90),
+        };
+
+        var licenseLabel = new Label
+        {
+            Text      = "Open source  ·  MIT License",
+            Location  = new Point(170, 54),
+            Size      = new Size(240, 18),
+            Font      = FontManager.Regular(8.5f),
+            ForeColor = Color.FromArgb(55, 55, 55),
+        };
+
+        heroCard.Controls.AddRange([noteLabel, appNameLabel, versionLabel, licenseLabel]);
+        inner.Controls.Add(heroCard);
+        y += heroCard.Height + 20;
+
+        // ── Description ──────────────────────────────────────────────────────
+        inner.Controls.Add(new Label
+        {
+            Text      = "Automatic Last.fm scrobbling for Apple Music on Windows.\r\nUses the Windows SMTC API — the same interface Windows uses for its media overlay (Win+K).\r\nWorks with any SMTC-compatible media player including Spotify, VLC, and others.",
+            Location  = new Point(lx, y),
+            Size      = new Size(660, 58),
+            Font      = FontManager.Regular(9.5f),
+            ForeColor = Color.FromArgb(130, 130, 130),
+        });
+        y += 74;
+
+        // ── Separator ────────────────────────────────────────────────────────
+        inner.Controls.Add(new Panel { Location = new Point(lx, y), Size = new Size(620, 1), BackColor = Color.FromArgb(30, 30, 30) });
+        y += 18;
+
+        // ── Action buttons ───────────────────────────────────────────────────
+        var btnDonate = AboutActionBtn(
+            "♥  Donate", _cAccent,
+            Color.Transparent,
+            LightenColor(_cAccent, 18),
+            Color.White,
+            () => OpenUrl("https://spacechild.dev/donate"));
+        btnDonate.Location = new Point(lx, y);
+
+        var btnGitHub = AboutActionBtn(
+            "★  GitHub", Color.FromArgb(26, 26, 26),
+            Color.FromArgb(48, 48, 48),
+            Color.FromArgb(34, 34, 34),
+            CFg,
+            () => OpenUrl("https://github.com/SpaceChildDev/lastfm-scrobbler"));
+        btnGitHub.Location = new Point(lx + 182, y);
+
+        var btnSite = AboutActionBtn(
+            "↗  spacechild.dev", Color.Transparent,
+            Color.FromArgb(38, 38, 38),
+            Color.FromArgb(22, 22, 22),
+            Color.FromArgb(110, 110, 110),
+            () => OpenUrl("https://spacechild.dev"));
+        btnSite.Location = new Point(lx + 364, y);
+
+        inner.Controls.AddRange([btnDonate, btnGitHub, btnSite]);
+        y += 42 + 20;
+
+        // ── Separator ────────────────────────────────────────────────────────
+        inner.Controls.Add(new Panel { Location = new Point(lx, y), Size = new Size(620, 1), BackColor = Color.FromArgb(30, 30, 30) });
+        y += 18;
+
+        // ── Version section ──────────────────────────────────────────────────
+        inner.Controls.Add(new Label
+        {
+            Text      = "INSTALLED VERSION",
+            Location  = new Point(lx, y),
+            Size      = new Size(300, 16),
+            Font      = FontManager.Bold(7.5f),
+            ForeColor = Color.FromArgb(60, 60, 60),
+        });
+        y += 22;
+
+        inner.Controls.Add(new Label
+        {
+            Text      = $"v{Application.ProductVersion}",
+            Location  = new Point(lx, y),
+            Size      = new Size(100, 22),
+            Font      = FontManager.Regular(10f),
+            ForeColor = Color.FromArgb(180, 180, 180),
+        });
+
+        var historyBtn = AboutActionBtn(
+            "⊞  Version History", Color.FromArgb(24, 24, 24),
+            Color.FromArgb(42, 42, 42),
+            Color.FromArgb(30, 30, 30),
+            Color.FromArgb(150, 150, 150),
+            () =>
+            {
+                using var form = new VersionHistoryForm(new UpdateChecker(), _cAccent);
+                form.ShowDialog(this);
+            });
+        historyBtn.Location = new Point(lx + 116, y - 8);
+        inner.Controls.Add(historyBtn);
+        y += 50;
+
+        // ── Separator ────────────────────────────────────────────────────────
+        inner.Controls.Add(new Panel { Location = new Point(lx, y), Size = new Size(620, 1), BackColor = Color.FromArgb(26, 26, 26) });
+        y += 14;
+
+        // ── Footer ───────────────────────────────────────────────────────────
+        inner.Controls.Add(new Label
+        {
+            Text      = $"© {DateTime.Now.Year} SpaceChild.dev  ·  MIT License  ·  Made with ♥ for music lovers",
+            Location  = new Point(lx, y),
+            Size      = new Size(600, 18),
+            Font      = FontManager.Regular(8.5f),
+            ForeColor = Color.FromArgb(48, 48, 48),
+        });
+
+        _pageAbout.Controls.Add(inner);
+        _pageAbout.Controls.Add(heading);
+    }
+
+    private Panel AboutActionBtn(string label, Color fill, Color border, Color hover, Color fg, Action onClick)
+    {
+        bool hot = false;
+        var p = new Panel { Size = new Size(172, 38), Cursor = Cursors.Hand, BackColor = CMain };
+
+        p.Paint += (_, e) =>
+        {
+            var g  = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var rc = new Rectangle(0, 0, p.Width - 1, p.Height - 1);
+            using var path = RoundedPath(rc, 5);
+            using (var b = new SolidBrush(hot ? hover : fill)) g.FillPath(b, path);
+            if (border != Color.Transparent)
+                using (var pen = new Pen(border)) g.DrawPath(pen, path);
+            using (var tb = new SolidBrush(fg))
+            {
+                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                g.DrawString(label, FontManager.Regular(9.5f), tb, new RectangleF(0, 0, p.Width, p.Height), sf);
+            }
+        };
+
+        p.MouseEnter += (_, _) => { hot = true;  p.Invalidate(); };
+        p.MouseLeave += (_, _) => { hot = false; p.Invalidate(); };
+        p.Click      += (_, _) => onClick();
+        return p;
+    }
+
+    private static System.Drawing.Drawing2D.GraphicsPath RoundedPath(Rectangle r, int radius)
+    {
+        int d    = radius * 2;
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        path.AddArc(r.X,         r.Y,          d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y,          d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d,   0, 90);
+        path.AddArc(r.X,         r.Bottom - d, d, d,  90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    private static Color LightenColor(Color c, int amount) =>
+        Color.FromArgb(
+            Math.Min(255, c.R + amount),
+            Math.Min(255, c.G + amount),
+            Math.Min(255, c.B + amount));
 
     // ── Normalization Page ────────────────────────────────────────────────────
 

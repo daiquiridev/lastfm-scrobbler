@@ -34,7 +34,10 @@ public class UpdateChecker
             if (versionStr is null || url is null || sha256 is null) return null;
             if (!Version.TryParse(versionStr, out var remote))     return null;
 
-            return remote > _current ? new UpdateInfo(versionStr, url, sha256) : null;
+            // Normalize both to 3 components (Major.Minor.Build) so "1.2.2" == "1.2.2.0"
+            var r3 = new Version(remote.Major,   remote.Minor,   Math.Max(remote.Build,    0));
+            var c3 = new Version(_current.Major, _current.Minor, Math.Max(_current.Build,  0));
+            return r3 > c3 ? new UpdateInfo(versionStr, url, sha256) : null;
         }
         catch { return null; }
     }
