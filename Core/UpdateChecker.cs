@@ -111,7 +111,7 @@ public class UpdateChecker
         Process.Start(new ProcessStartInfo(installerPath)
         {
             UseShellExecute = true,
-            Arguments       = "/verysilent /closeapplications /restartapplications",
+            Arguments       = "/verysilent /closeapplications /forcecloseapplications /restartapplications",
         });
     }
 }

@@ -125,6 +125,7 @@ public class MainForm : Form
     private readonly List<Button> _accentBtns = new();
 
     private Button _maxBtn = null!;
+    private bool   _externalCloseRequested;
 
     public MainForm(Database db, ScrobbleEngine engine, AppSettings settings)
     {
@@ -166,7 +167,15 @@ public class MainForm : Form
         BackColor       = CMain;
         ForeColor       = CFg;
         Font            = FontManager.Regular(9.5f);
-        FormClosing    += (_, e) => { e.Cancel = true; Hide(); };
+        FormClosing    += (_, e) =>
+        {
+            // Hide to tray on user close (X button); allow real shutdown when
+            // Windows / Restart Manager / installer asks us to terminate.
+            if (e.CloseReason == CloseReason.UserClosing && !_externalCloseRequested)
+            {
+                e.Cancel = true; Hide();
+            }
+        };
         SizeChanged    += (_, _) => { if (_maxBtn != null) _maxBtn.Text = WindowState == FormWindowState.Maximized ? "❐" : "□"; };
         Load           += (_, _) => SizePages();
 
@@ -1932,10 +1941,21 @@ public class MainForm : Form
 
     protected override void WndProc(ref Message m)
     {
-        const int WM_NCHITTEST = 0x84;
+        const int WM_NCHITTEST       = 0x84;
+        const int WM_QUERYENDSESSION = 0x11;
+        const int WM_ENDSESSION      = 0x16;
         const int HTLEFT = 10, HTRIGHT = 11, HTTOPLEFT = 13, HTTOPRIGHT = 14;
         const int HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
         const int grip = 6;
+
+        // Windows / Restart Manager / Inno Setup signal app to close.
+        if (m.Msg == WM_QUERYENDSESSION || m.Msg == WM_ENDSESSION)
+        {
+            _externalCloseRequested = true;
+            if (m.Msg == WM_QUERYENDSESSION) m.Result = (IntPtr)1;
+            BeginInvoke(() => Application.Exit());
+        }
+
         if (m.Msg == WM_NCHITTEST)
         {
             var p = PointToClient(Cursor.Position);
