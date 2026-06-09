@@ -79,9 +79,11 @@ public class MediaWatcher : IDisposable
 
         if (_filterAppleMusicOnly)
         {
-            // Apple Music on Windows: app ID contains "AppleInc.AppleMusic" or "iTunes"
+            // Apple Music on Windows: app ID varies by OS version and install method.
+            // Windows 11 Store: "AppleInc.AppleMusic", Windows 10 Store: "AppleMusic.exe"
             var appleSession = sessions.FirstOrDefault(s =>
                 s.SourceAppUserModelId.Contains("AppleInc.AppleMusic", StringComparison.OrdinalIgnoreCase) ||
+                s.SourceAppUserModelId.Contains("AppleMusic.exe", StringComparison.OrdinalIgnoreCase) ||
                 s.SourceAppUserModelId.Contains("iTunes", StringComparison.OrdinalIgnoreCase) ||
                 s.SourceAppUserModelId.Contains("Apple Music", StringComparison.OrdinalIgnoreCase));
 
